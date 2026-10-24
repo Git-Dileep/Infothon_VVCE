@@ -114,6 +114,11 @@
     "nvd_window": "published 2024-01-01 .. 2025-12-31 (shrink if snapshot > 50 MB)",
     "fix_links": "NVD reference URLs tagged 'Patch' or 'Vendor Advisory'"
   },
+  "download_urls": {
+    "nvd": "https://services.nvd.nist.gov/rest/json/cves/2.0",
+    "kev": "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json",
+    "epss": "https://epss.empiricalsecurity.com/epss_scores-current.csv.gz"
+  },
   "contract": {
     "tables": {
       "cve": [
