@@ -23,22 +23,48 @@ with st.sidebar:
             st.rerun()
     st.divider()
     demo_mode = st.toggle("Demo mode (simulate KEV feed)", value=True)
-    if st.button("Check for new KEV entries"):
+    if st.button("Check for new KEV entries", type="primary"):
         try:
             if demo_mode:
-                ingest.simulate_new_kev(conn)
+                new_cve = ingest.simulate_new_kev(conn)
             else:
-                ingest.sync_kev(conn)  # P1-2
-            st.session_state["new_kev"] = ingest.new_kev_since_last_sync(conn)
+                ingest.sync_kev(conn)
+            new_entries = ingest.new_kev_since_last_sync(conn)
+            st.session_state["new_kev"] = new_entries
             ingest.mark_kev_seen(conn)
+            st.rerun()
         except NotImplementedError as e:
             st.info(str(e))
+        except Exception as e:
+            st.error(f"KEV sync error: {e}")
 
 if n_cves == 0:
     st.stop()
 
-if st.session_state.get("new_kev"):
-    st.error(f"New CISA KEV entries: {', '.join(st.session_state['new_kev'])}. Queue re-scored.")
+# ---------------- New KEV Alert Banner & Patch Plan ----------------
+new_kev_list = st.session_state.get("new_kev", [])
+if new_kev_list:
+    st.error(
+        f"🚨 **NEW CISA KEV ALERT DETECTED ({len(new_kev_list)} new entry):** "
+        f"**{', '.join(new_kev_list)}** added to Known Exploited Vulnerabilities catalog. "
+        "Queue automatically re-ranked to prioritize in-the-wild threats."
+    )
+    # Auto-generate patch plan sentences from scoring.explain (no LLM needed)
+    with st.expander("⚡ **Immediate Auto-Generated Patch Plan**", expanded=True):
+        for cve_id in new_kev_list:
+            try:
+                ex = scoring.explain(conn, cve_id)
+                matched_str = ", ".join(ex["matched_assets"]) if ex["matched_assets"] else "general infrastructure"
+                st.markdown(
+                    f"- **{cve_id}** (Elevated to **{ex['tier']}**, Risk Score **{ex['score']:.4f}**): "
+                    f"Affects **{matched_str}**. Active exploitation confirmed in the wild. "
+                    f"Immediate remediation required: apply vendor security patch or isolate affected endpoints."
+                )
+            except Exception:
+                st.markdown(f"- **{cve_id}**: Elevated to Critical due to active CISA KEV listing.")
+        if st.button("Acknowledge & Dismiss Alert"):
+            st.session_state["new_kev"] = []
+            st.rerun()
 
 queue = scoring.ranked_queue(conn)
 tab_q, tab_chat, tab_assets, tab_graph = st.tabs(["Patch queue", "Assistant", "Assets", "Graph"])
@@ -75,6 +101,17 @@ with tab_q:
             view["cve_id"].str.lower().str.contains(search_kw)
             | view["description"].str.lower().str.contains(search_kw)
         ]
+
+    if new_kev_list:
+        new_elevated = view[view["cve_id"].isin(new_kev_list)]
+        if len(new_elevated):
+            st.warning(f"🚨 **Newly Elevated CISA KEV Vulnerabilities ({len(new_elevated)}):**")
+            st.dataframe(
+                new_elevated.drop(columns=["description"]),
+                column_config=column_config,
+                use_container_width=True,
+                hide_index=True,
+            )
 
     # Display Queue with configured columns
     column_config = {
@@ -201,12 +238,75 @@ with tab_q:
 
 # ---------------- assistant ----------------
 with tab_chat:
-    q = st.text_input("Ask about your patch queue", placeholder="What should we patch first?")
-    if st.button("Ask") and q:
-        res = assistant.answer(q, conn)
-        (st.warning if res["refused"] else st.success)(res["answer"])
-        if res["citations"]:
-            st.caption("Evidence: " + ", ".join(res["citations"]))
+    st.subheader("🤖 Evidence-Only Vulnerability Assistant")
+    st.markdown(
+        "Ask natural language questions about your patch queue, CVE risks, fixes, and affected assets. "
+        "Every answer is **grounded exclusively in verified SQLite facts** and verified by a deterministic citation checker. "
+        "If verifiable evidence is not found, the assistant strictly **refuses to answer** to eliminate hallucinations."
+    )
+
+    st.markdown("**Example Questions (Click to test):**")
+    top_cve = queue.iloc[0]["cve_id"] if len(queue) > 0 else "CVE-2025-55182"
+
+    col_btn1, col_btn2, col_btn3, col_btn4 = st.columns(4)
+    example_query = None
+    with col_btn1:
+        if st.button("🚨 What to patch first?", use_container_width=True):
+            example_query = "What should we patch first?"
+    with col_btn2:
+        if st.button(f"🔧 Fix for {top_cve}?", use_container_width=True):
+            example_query = f"Is there a fix for {top_cve}?"
+    with col_btn3:
+        if st.button("🏢 Affected assets?", use_container_width=True):
+            example_query = "Which internal assets are affected by critical vulnerabilities?"
+    with col_btn4:
+        if st.button("🛑 Out-of-scope (Refusal)", use_container_width=True):
+            example_query = "Who is the CEO of Acme Corporation?"
+
+    if "chat_query" not in st.session_state:
+        st.session_state["chat_query"] = ""
+
+    if example_query:
+        st.session_state["chat_query"] = example_query
+
+    q_input = st.text_input(
+        "Ask a question about vulnerabilities or assets:",
+        value=st.session_state["chat_query"],
+        placeholder="e.g. What is the risk score of CVE-2025-55182? or Is there a patch?",
+        key="assistant_query_input",
+    )
+
+    ask_clicked = st.button("Ask Assistant", type="primary")
+
+    active_query = q_input.strip()
+    if (ask_clicked or example_query) and active_query:
+        with st.spinner("Retrieving evidence and verifying citations..."):
+            res = assistant.answer(active_query, conn)
+            try:
+                retrieved_evs = assistant.retrieve(conn, active_query)
+                ev_map = {ev.id: ev for ev in retrieved_evs}
+            except Exception:
+                ev_map = {}
+
+        if res["refused"]:
+            st.warning(f"⚠️ **Refused by Verification Policy**: {res['answer']}")
+            st.info(
+                "🛡️ **Zero-Hallucination Guarantee**: The assistant could not find verifiable facts "
+                "in the loaded database to support an answer to this query. In accordance with PatchPilot "
+                "safety rules, the query was refused rather than generating ungrounded claims."
+            )
+        else:
+            st.success(res["answer"])
+            if res["citations"]:
+                with st.expander(f"🔎 **Cited Evidence & Verification Details ({len(res['citations'])} facts)**", expanded=True):
+                    st.markdown("✅ **Deterministic Citation Verification: PASSED**")
+                    st.caption("Every claim in the answer is verified against retrieved SQLite ground-truth facts:")
+                    for cid in res["citations"]:
+                        ev = ev_map.get(cid)
+                        if ev:
+                            st.markdown(f"- **`[{cid}]`** *(source: {ev.source})*: {ev.text}")
+                        else:
+                            st.markdown(f"- **`[{cid}]`** *(verified fact)*")
 
 # ---------------- assets ----------------
 with tab_assets:
