@@ -210,14 +210,91 @@ with tab_chat:
 
 # ---------------- assets ----------------
 with tab_assets:
-    st.dataframe(assets.list_assets(conn), use_container_width=True, hide_index=True)
-    up = st.file_uploader("Upload asset CSV (name, criticality)", type="csv")
-    if up and st.button("Import"):
-        try:
-            st.success(f"Imported {assets.import_assets_csv(conn, up)} assets")
+    st.subheader("🏢 Internal Asset Inventory & Fuzzy Vendor/Product Mapping")
+    st.markdown(
+        "Upload your asset inventory to contextualize vulnerability risk. Messy asset names are automatically mapped "
+        "to official vendor/product records using **RapidFuzz** (`WRatio`). High-confidence matches ($\ge 0.85$) are "
+        "auto-accepted; borderline matches ($0.60 - 0.85$) are flagged for manual review."
+    )
+
+    asset_list = assets.list_assets(conn)
+
+    up_col1, up_col2 = st.columns([2, 1])
+    with up_col1:
+        up = st.file_uploader("Upload asset CSV (`name, criticality`)", type="csv")
+        if up and st.button("Import Uploaded CSV", type="primary"):
+            try:
+                count = assets.import_assets_csv(conn, up)
+                st.success(f"Successfully imported and mapped {count} assets! Patch queue re-ranked.")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Import failed: {e}")
+
+    with up_col2:
+        st.markdown("**Quick Demo Data:**")
+        if st.button("Load Sample Assets (`sample_assets.csv`)"):
+            try:
+                with open(config.SAMPLE_ASSETS_CSV, "rb") as f:
+                    count = assets.import_assets_csv(conn, f)
+                st.success(f"Loaded {count} sample assets! Queue re-ranked.")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Failed to load sample assets: {e}")
+
+        if len(asset_list) > 0:
+            if st.button("Clear Asset Inventory", type="secondary"):
+                conn.execute("DELETE FROM asset")
+                conn.commit()
+                st.warning("Asset inventory cleared. Risk scores reset to neutral asset factor.")
+                st.rerun()
+
+    st.markdown("---")
+
+    if len(asset_list) == 0:
+        st.info("No assets currently registered. Upload a CSV above or click 'Load Sample Assets' to see asset-driven re-ranking.")
+    else:
+        # Match status annotation
+        def status_label(conf):
+            if pd.isna(conf) or conf < 0.60:
+                return "❌ Unmatched (<0.60)"
+            elif conf < 0.85:
+                return "⚠️ Needs Review (0.60-0.85)"
+            return "✅ Auto-Accepted (≥0.85)"
+
+        asset_list["status"] = asset_list["match_confidence"].apply(status_label)
+
+        st.markdown(f"**Loaded Assets ({len(asset_list)})** — Edit vendor/product below to refine matches:")
+        
+        edited_df = st.data_editor(
+            asset_list,
+            column_config={
+                "id": st.column_config.NumberColumn("ID", disabled=True, width="small"),
+                "name": st.column_config.TextColumn("Asset Name", disabled=True, width="large"),
+                "vendor": st.column_config.TextColumn("Vendor (editable)"),
+                "product": st.column_config.TextColumn("Product (editable)"),
+                "criticality": st.column_config.NumberColumn("Criticality", min_value=0.0, max_value=1.0, format="%.2f"),
+                "match_confidence": st.column_config.ProgressColumn("Confidence", min_value=0.0, max_value=1.0, format="%.2f"),
+                "status": st.column_config.TextColumn("Match Status", disabled=True, width="medium"),
+            },
+            hide_index=True,
+            use_container_width=True,
+            key="asset_editor",
+        )
+
+        if st.button("Save Asset Mapping Edits"):
+            for _, row in edited_df.iterrows():
+                conn.execute(
+                    "UPDATE asset SET vendor = ?, product = ?, criticality = ? WHERE id = ?",
+                    (
+                        str(row["vendor"]).strip().lower() if pd.notna(row["vendor"]) else None,
+                        str(row["product"]).strip().lower() if pd.notna(row["product"]) else None,
+                        float(row["criticality"]),
+                        int(row["id"]),
+                    ),
+                )
+            conn.commit()
+            st.success("Asset mappings updated! The patch queue is immediately re-ranked.")
             st.rerun()
-        except NotImplementedError as e:
-            st.info(str(e))
 
 # ---------------- graph ----------------
 with tab_graph:
@@ -230,3 +307,4 @@ with tab_graph:
         st.info(str(e))
     except ImportError as e:
         st.info(f"Missing dependency: {e}")
+
