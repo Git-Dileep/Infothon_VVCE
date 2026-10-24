@@ -177,5 +177,12 @@
       "CVE-2025-55182:score"
     ],
     "refused": false
+  },
+  "fix for cve-2025-55182||5dfcb4c0600278c8": {
+    "answer": "The fix links for CVE-2025-55182 include the patch and vendor advisory at https://react.dev/blog/2025/12/03/critical-security-vulnerability-in-react-server-components, the vendor advisory at https://www.facebook.com/security/advisories/cve-2025-55182, and the patch at http://www.openwall.com/lists/oss-security/2025/12/03/4.",
+    "citations": [
+      "CVE-2025-55182:fix"
+    ],
+    "refused": false
   }
 }

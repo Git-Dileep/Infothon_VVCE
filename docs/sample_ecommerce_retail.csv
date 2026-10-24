@@ -1,0 +1,9 @@
+name,criticality,vendor,product
+Core Shopping Cart Cache Redis,1.0,redis,redis
+Checkout Backend Linux Engine,1.0,linux,linux_kernel
+Marketing Experience Manager Adobe,0.7,adobe,experience_manager
+Retail Store POS Register Windows,0.8,microsoft,windows_10_22h2
+Warehouse Scanner Android Devices,0.6,google,android
+Corporate Confluence Wiki,0.5,atlassian,jira_align
+Customer Service Browser Desktops,0.4,google,chrome
+Payment Processing Oracle DB,1.0,oracle,concurrent_processing

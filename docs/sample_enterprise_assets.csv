@@ -1,0 +1,11 @@
+name,criticality
+Finance Production Server (Oracle DB),1.0
+HR Portal webserver Apache,0.8
+Marketing CMS WordPress instance,0.5
+Corporate Email Gateway Cisco,1.0
+Internal Wiki Confluence Atlassian,0.6
+Edge Firewall Fortinet FortiOS,1.0
+Developer Laptop Node.js runtime,0.3
+QA Database PostgreSQL cluster,0.4
+Prod Redis Cache Cluster,0.9
+Staging Kubernetes Cluster,0.7

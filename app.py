@@ -249,25 +249,29 @@ with tab_chat:
     top_cve = queue.iloc[0]["cve_id"] if len(queue) > 0 else "CVE-2025-55182"
 
     col_btn1, col_btn2, col_btn3, col_btn4 = st.columns(4)
-    example_query = None
     with col_btn1:
         if st.button("🚨 What to patch first?", use_container_width=True):
-            example_query = "What should we patch first?"
+            st.session_state["chat_query"] = "What should we patch first?"
+            st.session_state["auto_ask"] = True
+            st.rerun()
     with col_btn2:
         if st.button(f"🔧 Fix for {top_cve}?", use_container_width=True):
-            example_query = f"Is there a fix for {top_cve}?"
+            st.session_state["chat_query"] = f"Is there a fix for {top_cve}?"
+            st.session_state["auto_ask"] = True
+            st.rerun()
     with col_btn3:
         if st.button("🏢 Affected assets?", use_container_width=True):
-            example_query = "Which internal assets are affected by critical vulnerabilities?"
+            st.session_state["chat_query"] = "Which internal assets are affected by critical vulnerabilities?"
+            st.session_state["auto_ask"] = True
+            st.rerun()
     with col_btn4:
         if st.button("🛑 Out-of-scope (Refusal)", use_container_width=True):
-            example_query = "Who is the CEO of Acme Corporation?"
+            st.session_state["chat_query"] = "Who is the CEO of Acme Corporation?"
+            st.session_state["auto_ask"] = True
+            st.rerun()
 
     if "chat_query" not in st.session_state:
         st.session_state["chat_query"] = ""
-
-    if example_query:
-        st.session_state["chat_query"] = example_query
 
     q_input = st.text_input(
         "Ask a question about vulnerabilities or assets:",
@@ -278,8 +282,11 @@ with tab_chat:
 
     ask_clicked = st.button("Ask Assistant", type="primary")
 
+    # Auto-trigger from example buttons
+    auto_ask = st.session_state.pop("auto_ask", False)
+
     active_query = q_input.strip()
-    if (ask_clicked or example_query) and active_query:
+    if (ask_clicked or auto_ask) and active_query:
         with st.spinner("Retrieving evidence and verifying citations..."):
             res = assistant.answer(active_query, conn)
             try:
@@ -307,6 +314,8 @@ with tab_chat:
                             st.markdown(f"- **`[{cid}]`** *(source: {ev.source})*: {ev.text}")
                         else:
                             st.markdown(f"- **`[{cid}]`** *(verified fact)*")
+
+
 
 # ---------------- assets ----------------
 with tab_assets:
@@ -402,7 +411,8 @@ with tab_graph:
     st.markdown(
         "Interactive entity-relationship graph modeled directly over SQLite tables "
         "(`cve`, `cwe`, `cve_product`, `fix`, `asset`) using **NetworkX** and rendered via **Pyvis**. "
-        "*(Note: Powered by a relational graph model over SQLite, not an expensive Neo4j instance).*"
+        "**Click any green 🔧 Fix/Advisory node to open the vendor link in a new tab.** "
+        "*(Powered by a relational graph model over SQLite, not an expensive Neo4j instance).*"
     )
 
     g_col1, g_col2 = st.columns([3, 1])
@@ -411,13 +421,13 @@ with tab_graph:
     with g_col2:
         st.markdown(
             """
-            **Legend:**
-            - 🔴 **KEV CVE** (Active Exploit)
-            - 🟡 **Standard CVE**
-            - 🟣 **CWE Category**
-            - 🔵 **Product**
-            - 🟢 **Fix / Advisory**
-            - 🟠 **Internal Asset**
+            **Legend (node types):**
+            - 🔒🔴 **KEV CVE** — Active Exploit
+            - 🔒🟡 **Standard CVE**
+            - 🛡️🟣 **CWE Category** — Weakness Type
+            - 📦🔵 **Product** — Affected Software
+            - 🔧🟢 **Fix / Advisory** — *Click to open ↗*
+            - 🖥️🟠 **Internal Asset** — Your Infrastructure
             """
         )
 
@@ -429,4 +439,5 @@ with tab_graph:
         components.html(graph.render_html(g), height=620)
     except Exception as e:
         st.error(f"Error rendering knowledge graph: {e}")
+
 

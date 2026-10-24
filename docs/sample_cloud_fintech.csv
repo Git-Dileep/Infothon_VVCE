@@ -1,0 +1,9 @@
+name,criticality,vendor,product
+Prod Valkey In-Memory Cache,1.0,lfprojects,valkey
+Payment Gateway Oracle DB,1.0,oracle,concurrent_processing
+Linux Kernel Production Compute,0.9,linux,linux_kernel
+Corporate Active Directory Server,1.0,microsoft,windows_server_2025
+Staff Secure Browser Endpoints,0.6,google,chrome
+Infrastructure Monitor Nagios,0.7,nagios,nagios_xi
+Edge Perimeter Firewall Fortinet,1.0,fortinet,fortios
+Staging Microservices Cluster,0.5,linux,linux_kernel

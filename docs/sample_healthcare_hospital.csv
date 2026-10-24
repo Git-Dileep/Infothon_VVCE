@@ -1,0 +1,9 @@
+name,criticality,vendor,product
+Medical Imaging PACS Gateway,1.0,siemens,simatic_s7-1500_cpu_1518-4_pn\/dp_mfp
+Patient EHR File Storage Gladinet,0.9,gladinet,centrestack
+Hospital Domain Controller,1.0,microsoft,windows_server_2019
+Telehealth API Linux Cluster,0.8,linux,linux_kernel
+Radiology Diagnostic Workstation,0.7,apple,macos
+Nurse Point-of-Care Tablets,0.5,google,android
+Pharmacy Inventory Server,0.8,microsoft,windows_server_2022
+Emergency Room Triage Display,0.4,google,chrome
