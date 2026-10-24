@@ -10,9 +10,11 @@ except ImportError:  # dotenv is optional
     pass
 
 ROOT = Path(__file__).resolve().parent.parent
-DB_PATH = os.getenv("DB_PATH", str(ROOT / "data" / "fixture.db"))
+DB_PATH = os.getenv("DB_PATH", str(ROOT / "data" / "patchpilot.db"))
+FIXTURE_DB_PATH = ROOT / "data" / "fixture.db"
 FIXTURE_PATH = ROOT / "data" / "fixture" / "fixture.json"
 NEW_KEV_FIXTURE_PATH = ROOT / "data" / "fixture" / "new_kev.json"
+SYNTHETIC_NEW_KEV_FIXTURE_PATH = ROOT / "data" / "fixture" / "new_kev_synthetic.json"
 SAMPLE_ASSETS_CSV = ROOT / "data" / "fixture" / "sample_assets.csv"
 EVAL_PATH = ROOT / "data" / "eval" / "questions.json"
 RAW_DIR = ROOT / "data" / "raw"

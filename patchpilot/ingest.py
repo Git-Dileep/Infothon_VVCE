@@ -1,7 +1,6 @@
 """Data ingestion. OWNER: Person 1.
 
-Includes the synthetic fixture, NVD/KEV/EPSS loaders, and offline KEV demo helpers.
-EPSS history downloads for the backtest remain a separate task.
+Includes NVD, KEV, and EPSS loaders, snapshot creation, and offline demo helpers.
 """
 from __future__ import annotations
 
@@ -16,6 +15,7 @@ from datetime import date, datetime, time as datetime_time, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
+import pandas as pd
 import requests
 
 from . import config, db
@@ -66,12 +66,27 @@ def new_kev_since_last_sync(conn: sqlite3.Connection) -> list[str]:
     return [r[0] for r in rows]
 
 
-def simulate_new_kev(conn: sqlite3.Connection, path=config.NEW_KEV_FIXTURE_PATH) -> str:
+def simulate_new_kev(
+    conn: sqlite3.Connection, path: str | Path | None = None
+) -> str:
     """Offline demo helper: pretend CISA just added a CVE to KEV. Returns the CVE id."""
-    d = json.loads(open(path, encoding="utf-8").read())
+    selected_path = Path(path) if path is not None else config.NEW_KEV_FIXTURE_PATH
+    with selected_path.open(encoding="utf-8") as handle:
+        d = json.load(handle)
+    cve_id = d["cve_id"]
+    if conn.execute("SELECT 1 FROM cve WHERE cve_id=?", (cve_id,)).fetchone() is None:
+        if path is None and conn.execute(
+            "SELECT 1 FROM cve WHERE cve_id LIKE 'CVE-2099-%' LIMIT 1"
+        ).fetchone():
+            selected_path = config.SYNTHETIC_NEW_KEV_FIXTURE_PATH
+            with selected_path.open(encoding="utf-8") as handle:
+                d = json.load(handle)
+            cve_id = d["cve_id"]
+        else:
+            raise ValueError(f"Demo KEV CVE {cve_id} is not present in the database")
     conn.execute("INSERT OR REPLACE INTO kev VALUES (?,?,?)", (d["cve_id"], d["date_added"], d["due_date"]))
     conn.commit()
-    return d["cve_id"]
+    return cve_id
 
 
 def _project_config() -> dict[str, Any]:
@@ -261,12 +276,30 @@ def _save_cve(conn: sqlite3.Connection, entry: dict[str, Any]) -> str | None:
 
 
 def sync_kev(conn: sqlite3.Connection) -> list[str]:
-    """Download CISA KEV and return IDs newly added to the local KEV table."""
-    response = requests.get(_download_url("kev"), timeout=60)
-    response.raise_for_status()
-    payload = response.json()
-    if not isinstance(payload.get("vulnerabilities"), list):
+    """Download CISA KEV, falling back to the last valid feed when offline."""
+    cache_path = config.RAW_DIR / "kev" / "known_exploited_vulnerabilities.json"
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    url = _download_url("kev")
+    downloaded = False
+    try:
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
+        payload = response.json()
+        downloaded = True
+    except requests.RequestException:
+        if not cache_path.exists():
+            raise
+        with cache_path.open(encoding="utf-8") as handle:
+            payload = json.load(handle)
+
+    if not isinstance(payload, dict) or not isinstance(payload.get("vulnerabilities"), list):
         raise ValueError("CISA KEV response is missing its vulnerabilities list")
+
+    if downloaded:
+        temporary_path = cache_path.with_suffix(".json.tmp")
+        with temporary_path.open("w", encoding="utf-8") as handle:
+            json.dump(payload, handle, ensure_ascii=False)
+        temporary_path.replace(cache_path)
 
     db.init_db(conn)
     existing = {row[0] for row in conn.execute("SELECT cve_id FROM kev")}
@@ -288,11 +321,7 @@ def sync_kev(conn: sqlite3.Connection) -> list[str]:
     return new_ids
 
 
-def sync_epss(conn: sqlite3.Connection) -> int:
-    """Load current EPSS score and percentile only for CVEs already in `cve`."""
-    response = requests.get(_download_url("epss"), timeout=120)
-    response.raise_for_status()
-    content = response.content
+def _epss_reader(content: bytes, required_columns: set[str]) -> csv.DictReader:
     if content.startswith(b"\x1f\x8b"):
         content = gzip.decompress(content)
     text = content.decode("utf-8-sig")
@@ -304,8 +333,26 @@ def sync_epss(conn: sqlite3.Connection) -> int:
     if not lines:
         raise ValueError("EPSS feed contained no CSV header or score rows")
     reader = csv.DictReader(io.StringIO("\n".join(lines)))
-    if not {"cve", "epss", "percentile"}.issubset(reader.fieldnames or []):
-        raise ValueError("EPSS CSV must contain cve, epss, and percentile columns")
+    if not required_columns.issubset(reader.fieldnames or []):
+        names = ", ".join(sorted(required_columns))
+        raise ValueError(f"EPSS CSV must contain {names} columns")
+    return reader
+
+
+def _epss_history_path(value: str | date) -> tuple[str, Path]:
+    date_text = value.isoformat() if isinstance(value, date) else value
+    try:
+        normalized = date.fromisoformat(date_text).isoformat()
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Invalid EPSS history date: {date_text!r}") from exc
+    return normalized, config.RAW_DIR / "epss" / f"epss_scores-{normalized}.csv.gz"
+
+
+def sync_epss(conn: sqlite3.Connection) -> int:
+    """Load current EPSS score and percentile only for CVEs already in `cve`."""
+    response = requests.get(_download_url("epss"), timeout=120)
+    response.raise_for_status()
+    reader = _epss_reader(response.content, {"cve", "epss", "percentile"})
 
     db.init_db(conn)
     known_cves = {row[0] for row in conn.execute("SELECT cve_id FROM cve")}
@@ -332,6 +379,58 @@ def sync_epss(conn: sqlite3.Connection) -> int:
     )
     conn.commit()
     return len(scores)
+
+
+def download_epss_history(dates: list[str]) -> list[Path]:
+    """Download archived daily EPSS scores, retaining the original gzip files."""
+    requested = [_epss_history_path(value) for value in dates]
+    url_template = _download_url("epss_history")
+    paths: list[Path] = []
+    for day, path in requested:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if path.exists():
+            with path.open("rb") as handle:
+                _epss_reader(handle.read(), {"cve", "epss"})
+            paths.append(path)
+            continue
+
+        response = requests.get(url_template.format(date=day), timeout=120)
+        response.raise_for_status()
+        content = response.content
+        if not content.startswith(b"\x1f\x8b"):
+            raise ValueError(f"EPSS history feed for {day} was not gzip-compressed")
+        _epss_reader(content, {"cve", "epss"})
+        temporary_path = path.with_suffix(path.suffix + ".tmp")
+        with temporary_path.open("wb") as handle:
+            handle.write(content)
+        temporary_path.replace(path)
+        paths.append(path)
+    return paths
+
+
+def load_epss_history(value: str | date) -> pd.DataFrame:
+    """Load an archived EPSS file with columns `cve_id` and `score`."""
+    day, path = _epss_history_path(value)
+    if not path.exists():
+        raise FileNotFoundError(
+            f"EPSS history for {day} is missing; run download_epss_history first"
+        )
+    with path.open("rb") as handle:
+        reader = _epss_reader(handle.read(), {"cve", "epss"})
+
+    scores: dict[str, float] = {}
+    for row in reader:
+        cve_id = (row.get("cve") or "").strip().upper()
+        try:
+            score = float(row.get("epss", ""))
+        except (TypeError, ValueError):
+            continue
+        if cve_id and 0 <= score <= 1:
+            scores[cve_id] = score
+    return pd.DataFrame(
+        [(cve_id, score) for cve_id, score in scores.items()],
+        columns=["cve_id", "score"],
+    )
 
 
 def sync_nvd(conn: sqlite3.Connection, start: str, end: str) -> dict[str, int]:
@@ -377,26 +476,33 @@ def sync_nvd(conn: sqlite3.Connection, start: str, end: str) -> dict[str, int]:
     }
 
 
-def download_epss_history(dates: list[str]) -> None:
-    """Fetch dated EPSS files into data/raw/epss/ for the backtest. (issue P1-3)"""
-    raise NotImplementedError("P1-3: implement EPSS history download")
-
-
 def main() -> None:
     ap = argparse.ArgumentParser(description="PatchPilot data ingestion")
     subparsers = ap.add_subparsers(dest="cmd", required=True)
-    subparsers.add_parser("fixture", help="Load the synthetic development fixture")
+    fixture_parser = subparsers.add_parser(
+        "fixture", help="Load the synthetic development fixture"
+    )
+    fixture_parser.add_argument("--db", default=str(config.FIXTURE_DB_PATH))
     nvd_parser = subparsers.add_parser("nvd", help="Sync published CVEs from NVD API 2.0")
     nvd_parser.add_argument("--start", default="2024-01-01")
     nvd_parser.add_argument("--end", default="2025-12-31")
     subparsers.add_parser("kev", help="Sync the CISA Known Exploited Vulnerabilities catalog")
     subparsers.add_parser("epss", help="Sync current EPSS scores for known CVEs")
+    history_parser = subparsers.add_parser(
+        "epss-history", help="Download archived daily EPSS score files"
+    )
+    history_parser.add_argument("dates", nargs="+")
+    snapshot_parser = subparsers.add_parser(
+        "snapshot", help="Build the real NVD, KEV, EPSS, and FTS snapshot"
+    )
+    snapshot_parser.add_argument("--start", default="2025-10-01")
+    snapshot_parser.add_argument("--end", default="2025-12-31")
     args = ap.parse_args()
-    conn = db.connect()
+    conn = db.connect(args.db if args.cmd == "fixture" else None)
     try:
         if args.cmd == "fixture":
             n = load_fixture(conn)
-            print(f"Loaded {n} synthetic CVEs into {config.DB_PATH}")
+            print(f"Loaded {n} synthetic CVEs into {args.db}")
         elif args.cmd == "nvd":
             counts = sync_nvd(conn, args.start, args.end)
             print(
@@ -413,6 +519,31 @@ def main() -> None:
         elif args.cmd == "epss":
             count = sync_epss(conn)
             print(f"EPSS sync complete: {count} known CVEs updated.")
+        elif args.cmd == "epss-history":
+            paths = download_epss_history(args.dates)
+            print(f"Downloaded or reused {len(paths)} EPSS history files.")
+        elif args.cmd == "snapshot":
+            nvd_counts = sync_nvd(conn, args.start, args.end)
+            new_kev_ids = sync_kev(conn)
+            sync_epss(conn)
+            mark_kev_seen(conn)
+            conn.execute("VACUUM")
+            counts = {
+                "cves": conn.execute("SELECT COUNT(*) FROM cve").fetchone()[0],
+                "products": conn.execute("SELECT COUNT(*) FROM cve_product").fetchone()[0],
+                "fixes": conn.execute("SELECT COUNT(*) FROM fix").fetchone()[0],
+                "kev": conn.execute("SELECT COUNT(*) FROM kev").fetchone()[0],
+                "epss": conn.execute("SELECT COUNT(*) FROM epss").fetchone()[0],
+                "fts": conn.execute("SELECT COUNT(*) FROM cve_fts").fetchone()[0],
+            }
+            print(
+                "Snapshot complete: "
+                f"{counts['cves']} CVEs, {counts['products']} products, "
+                f"{counts['fixes']} fixes, {counts['kev']} KEV, "
+                f"{counts['epss']} EPSS, {counts['fts']} FTS rows; "
+                f"{nvd_counts['pages_downloaded']} NVD pages downloaded; "
+                f"{len(new_kev_ids)} new KEV entries."
+            )
     finally:
         conn.close()
 
