@@ -45,3 +45,19 @@ def test_unknown_cve_returns_empty():
 def test_out_of_scope_returns_empty():
     conn = make_conn()
     assert assistant.retrieve(conn, "Who is the CEO of Acme?") == []
+
+
+def test_answer_priority_question():
+    conn = make_conn()
+    ans = assistant.answer("What should we patch first?", conn)
+    assert not ans["refused"]
+    assert len(ans["citations"]) > 0
+    assert "CVE-2099-0002" in ans["answer"]
+
+
+def test_answer_unanswerable_question():
+    conn = make_conn()
+    ans = assistant.answer("Who is the CEO of Acme?", conn)
+    assert ans["refused"]
+    assert ans["citations"] == []
+

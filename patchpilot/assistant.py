@@ -340,15 +340,44 @@ def retrieve(conn: sqlite3.Connection, question: str) -> list[Evidence]:
 def answer(question: str, conn: sqlite3.Connection | None = None) -> Answer:
     """Public entry point used by the app. Must never raise; refuse instead."""
     try:
-        from . import db
+        from . import db, llm
 
         conn = conn or db.connect()
         evidence = retrieve(conn, question)
-    except NotImplementedError:
-        return {"answer": "Assistant not implemented yet (see issue P3-1).", "citations": [], "refused": True}
-    if not evidence:
-        return {"answer": "I can't answer that from the loaded data.", "citations": [], "refused": True}
-    raise NotImplementedError("P3-2: LLM generation + verification")
+        if not evidence:
+            return {"answer": "I can't answer that from the loaded data.", "citations": [], "refused": True}
+
+        # First attempt
+        ans = llm.generate_llm_answer(question, evidence)
+        if verify_citations(ans, evidence):
+            cache_key = llm._compute_cache_key(question, evidence)
+            llm.save_cached_answer(cache_key, ans)
+            return ans
+
+        # Retry once with verification feedback
+        feedback = (
+            f"Your citations {ans.get('citations', [])} failed verification. "
+            f"Allowed evidence IDs: {[e.id for e in evidence]}. "
+            f"Every cited ID must exist in the retrieved evidence, and all mentioned CVEs must match retrieved evidence."
+        )
+        retry_ans = llm.generate_llm_answer(question, evidence, retry_feedback=feedback)
+        if verify_citations(retry_ans, evidence):
+            cache_key = llm._compute_cache_key(question, evidence)
+            llm.save_cached_answer(cache_key, retry_ans)
+            return retry_ans
+
+        # Fallback to refusal if verification still fails
+        return {
+            "answer": "I can't answer that from the loaded data.",
+            "citations": [],
+            "refused": True,
+        }
+    except Exception:
+        return {
+            "answer": "I can't answer that from the loaded data.",
+            "citations": [],
+            "refused": True,
+        }
 
 
 def verify_citations(ans: Answer, evidence: list[Evidence]) -> bool:
