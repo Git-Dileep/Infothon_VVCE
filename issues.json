@@ -1,0 +1,320 @@
+{
+  "milestones": [
+    "1 - Contract and data",
+    "2 - Integrated MVP",
+    "3 - Demo-ready"
+  ],
+  "labels": [
+    {
+      "name": "p1-data",
+      "color": "1f77b4"
+    },
+    {
+      "name": "p2-scoring",
+      "color": "2ca02c"
+    },
+    {
+      "name": "p3-assistant",
+      "color": "9467bd"
+    },
+    {
+      "name": "p4-app",
+      "color": "ff7f0e"
+    },
+    {
+      "name": "all-hands",
+      "color": "d62728"
+    },
+    {
+      "name": "must",
+      "color": "b60205"
+    },
+    {
+      "name": "should",
+      "color": "fbca04"
+    }
+  ],
+  "issues": [
+    {
+      "key": "ALL-1",
+      "title": "[ALL-1] Clone, run the skeleton on the fixture, sign off the contract",
+      "role": "ALL",
+      "labels": [
+        "all-hands",
+        "must"
+      ],
+      "milestone": "1 - Contract and data",
+      "depends_on": [],
+      "body": "Everyone: `pip install -r requirements.txt`, `python -m patchpilot.ingest fixture`, `streamlit run app.py`, `python -m pytest -q`.\nRead `config/project.json` and `docs/ANTIGRAVITY_PROMPT.md`. Create your branch (`p1-data`, `p2-scoring`, `p3-assistant`, `p4-app`).\n\n**Done when:** app runs, tests pass, and you commented \"contract OK\" (or raised a change request) on this issue.\n\nContract: `config/project.json`. Edit only files you own. Keep `python -m pytest -q` green."
+    },
+    {
+      "key": "P1-1",
+      "title": "[P1-1] NVD downloader (CVE, CVSS, CWE, CPE, fix links)",
+      "role": "P1",
+      "labels": [
+        "p1-data",
+        "must"
+      ],
+      "milestone": "1 - Contract and data",
+      "depends_on": [],
+      "body": "Implement `ingest.sync_nvd(conn, start, end)` against NVD API 2.0 (`https://services.nvd.nist.gov/rest/json/cves/2.0`) for CVEs **published 2024-01-01..2025-12-31**.\n- Use `NVD_API_KEY`; paginate (`resultsPerPage=2000`, `startIndex`); the API caps date ranges at 120 days, so loop in windows. Exponential backoff on 403/429.\n- Cache raw JSON in `data/raw/nvd/` so a re-run never re-downloads.\n- Fill `cve` (cvss = CVSS v3.1, else v3.0, else NULL; cwe = first CWE), `cve_product` (vendor/product from CPE 2.3 criteria, lowercase, dedupe), `fix` (references tagged `Patch` or `Vendor Advisory`).\n- Call `db.rebuild_fts(conn)` at the end.\n\n**Done when:** a `python -m patchpilot.ingest nvd` style command (add it to `main()`) fills the DB; counts printed.\n\nContract: `config/project.json`. Edit only files you own. Keep `python -m pytest -q` green."
+    },
+    {
+      "key": "P1-2",
+      "title": "[P1-2] CISA KEV + current EPSS loaders",
+      "role": "P1",
+      "labels": [
+        "p1-data",
+        "must"
+      ],
+      "milestone": "1 - Contract and data",
+      "depends_on": [
+        "P1-1"
+      ],
+      "body": "Implement `ingest.sync_kev` (returns NEW cve_ids; KEV JSON `dateAdded`, `dueDate`) and `ingest.sync_epss` (current scores + percentile) from the URLs in `config/project.json`. **Verify the EPSS URL first** (see https://www.first.org/epss/data_stats); if it moved, update `project.json` and tell the team.\nRestrict EPSS rows to CVEs present in `cve` to keep the DB small.\n\n**Done when:** after P1-1, running KEV + EPSS sync makes `scoring.ranked_queue(conn)` return real rows.\n\n**Depends on:** P1-1\n\nContract: `config/project.json`. Edit only files you own. Keep `python -m pytest -q` green."
+    },
+    {
+      "key": "P1-3",
+      "title": "[P1-3] EPSS history files for the backtest",
+      "role": "P1",
+      "labels": [
+        "p1-data",
+        "must"
+      ],
+      "milestone": "1 - Contract and data",
+      "depends_on": [],
+      "body": "Implement `ingest.download_epss_history(dates)` saving dated daily EPSS files to `data/raw/epss/epss_scores-YYYY-MM-DD.csv.gz`. Cutoffs to fetch: **2025-01-01 and 2025-07-01** (adjust if files are unavailable; tell P2 immediately).\nWrite a tiny helper `ingest.load_epss_history(date) -> DataFrame[cve_id, score]` for P2.\nKEV `date_added` must be stored for all KEV rows (P1-2) because the backtest labels depend on it.\n\n**Done when:** P2 can load EPSS as of each cutoff date with one call. **Do this early; the backtest depends on it.**\n\nContract: `config/project.json`. Edit only files you own. Keep `python -m pytest -q` green."
+    },
+    {
+      "key": "P1-4",
+      "title": "[P1-4] Build and commit the data snapshot + FTS index",
+      "role": "P1",
+      "labels": [
+        "p1-data",
+        "must"
+      ],
+      "milestone": "1 - Contract and data",
+      "depends_on": [
+        "P1-1",
+        "P1-2"
+      ],
+      "body": "Add `python -m patchpilot.ingest snapshot` that builds `data/patchpilot.db` end to end (NVD + KEV + EPSS + FTS). Commit the DB to `p1-data` and open a PR.\n- Check file size: GitHub rejects >100 MB; aim for <50 MB (shrink the NVD window or drop CVEs with no CVSS and no EPSS if needed).\n- Update `.env.example` so `DB_PATH=data/patchpilot.db` is the default, and in `.gitignore` leave the snapshot tracked.\n- Post the row counts on this issue.\n\n**Done when:** `DB_PATH=data/patchpilot.db streamlit run app.py` shows a real queue.\n\n**Depends on:** P1-1, P1-2\n\nContract: `config/project.json`. Edit only files you own. Keep `python -m pytest -q` green."
+    },
+    {
+      "key": "P1-5",
+      "title": "[P1-5] Real new-KEV refresh + demo-safe fallback",
+      "role": "P1",
+      "labels": [
+        "p1-data",
+        "should"
+      ],
+      "milestone": "2 - Integrated MVP",
+      "depends_on": [
+        "P1-4"
+      ],
+      "body": "Make `sync_kev` robust (timeouts, offline fallback to cached file). Keep `simulate_new_kev` working against the REAL snapshot: pick a real, non-KEV, high-EPSS CVE affecting a product in the demo asset CSV and update `data/fixture/new_kev.json` + `config.NEW_KEV_FIXTURE_PATH` handling accordingly (tell P4).\n\n**Done when:** the \"Check for new KEV\" button in demo mode makes a real CVE jump to #1 on the real snapshot.\n\n**Depends on:** P1-4\n\nContract: `config/project.json`. Edit only files you own. Keep `python -m pytest -q` green."
+    },
+    {
+      "key": "P2-1",
+      "title": "[P2-1] Harden scoring: edge cases, performance, tests",
+      "role": "P2",
+      "labels": [
+        "p2-scoring",
+        "must"
+      ],
+      "milestone": "1 - Contract and data",
+      "depends_on": [],
+      "body": "Baseline `scoring.py` already works on the fixture. Make it production-solid:\n- Vectorised and fast on ~50k CVEs (`ranked_queue` < 1s); `explain` stays fast for a single CVE.\n- Null/edge handling (CVSS NULL, EPSS NULL, asset table empty vs populated), clamp inputs to [0,1].\n- Extend `tests/` with scoring-only tests (new file `tests/test_scoring.py`). Do **not** change function signatures or column names.\n\n**Done when:** tests green and a timing note is posted here.\n\nContract: `config/project.json`. Edit only files you own. Keep `python -m pytest -q` green."
+    },
+    {
+      "key": "P2-2",
+      "title": "[P2-2] CVSS-only vs PatchPilot order comparison",
+      "role": "P2",
+      "labels": [
+        "p2-scoring",
+        "must"
+      ],
+      "milestone": "2 - Integrated MVP",
+      "depends_on": [
+        "P2-1"
+      ],
+      "body": "Add `scoring.compare_orders(conn, top_n=10) -> DataFrame` with columns `cvss_rank, patchpilot_rank, cve_id, cvss, epss, kev, tier, why_moved` (short text, e.g. \"KEV-listed, EPSS 0.94\"). This powers demo step 1. Tell P4 the signature as soon as it is merged.\n\n**Done when:** on the fixture, CVE-2099-0001 is #1 by CVSS but low in PatchPilot, with a readable reason.\n\n**Depends on:** P2-1\n\nContract: `config/project.json`. Edit only files you own. Keep `python -m pytest -q` green."
+    },
+    {
+      "key": "P2-3",
+      "title": "[P2-3] Backtest dataset builder",
+      "role": "P2",
+      "labels": [
+        "p2-scoring",
+        "must"
+      ],
+      "milestone": "2 - Integrated MVP",
+      "depends_on": [
+        "P1-3"
+      ],
+      "body": "Implement the design in the `patchpilot/backtest.py` docstring. Build the as-of-T table: candidates = CVEs published before T and not in KEV as of T; label = KEV `date_added` within `horizon_days` after T (default 180); features = CVSS + EPSS from the file dated T. Cutoffs: 2025-01-01 and 2025-07-01.\nGuard against leakage: no KEV feature, no information from after T.\n\n**Done when:** `run_backtest` can return candidate/positive counts per cutoff, and a unit test covers the leakage rule on a mini dataset.\n\n**Depends on:** P1-3\n\nContract: `config/project.json`. Edit only files you own. Keep `python -m pytest -q` green."
+    },
+    {
+      "key": "P2-4",
+      "title": "[P2-4] Backtest metrics, chart and honest write-up",
+      "role": "P2",
+      "labels": [
+        "p2-scoring",
+        "must"
+      ],
+      "milestone": "2 - Integrated MVP",
+      "depends_on": [
+        "P2-3"
+      ],
+      "body": "For each cutoff compare `cvss_only`, `epss_only`, `blend` (0.35/0.30 reweighted to 1), `cvss>=7`, `cvss>=9`. Metric: share of positives caught when patching the top 5% and 10% of candidates (threshold rules: report fraction patched + fraction caught).\nOutputs: `docs/backtest.png`, `docs/backtest_results.csv`, and `docs/backtest.md` (3-5 lines: method, result, limitations, incl. \"KEV and asset factors are context and not testable here\"). One command: `python -m patchpilot.backtest`.\nIf the blend does not beat EPSS-only, say so plainly: \"matches EPSS, adds asset context and fixes\".\n\n**Done when:** chart + table regenerate with one command and P4 can embed `docs/backtest.png` in the app/deck.\n\n**Depends on:** P2-3\n\nContract: `config/project.json`. Edit only files you own. Keep `python -m pytest -q` green."
+    },
+    {
+      "key": "P3-1",
+      "title": "[P3-1] Evidence retrieval from SQL + FTS5",
+      "role": "P3",
+      "labels": [
+        "p3-assistant",
+        "must"
+      ],
+      "milestone": "1 - Contract and data",
+      "depends_on": [],
+      "body": "Implement `assistant.retrieve(conn, question) -> list[Evidence]`. Rule-based intent routing (regex for CVE ids; keywords: \"patch first/priority/top\", \"why\", \"fix/patch for\", \"KEV\", \"my assets/servers/affected\"). Build evidence with ids `CVE-ID:kind` where kind in `score | kev | epss | fix | desc | asset | cwe`:\n- Priority questions: top N from `scoring.ranked_queue`, each with `score` evidence (include `scoring.explain` factor text) and `kev` if applicable.\n- Fix questions: `fix` rows; if none exist, emit a `fix` evidence saying \"no fix link recorded\" (so the answer can say so, never invent one).\n- Multi-hop (\"which of my assets have KEV CVEs with a fix\"): SQL join over `asset`/`cve_product`/`kev`/`fix`.\n- Fallback: FTS5 over `cve_fts` (sanitise the query for FTS syntax).\n- Unknown CVE / out-of-scope question => empty list.\n\n**Done when:** retrieval returns sensible evidence for the 8 starter questions in `data/eval/questions.json` on the fixture.\n\nContract: `config/project.json`. Edit only files you own. Keep `python -m pytest -q` green."
+    },
+    {
+      "key": "P3-2",
+      "title": "[P3-2] LLM generation: strict JSON, injection-safe, cached",
+      "role": "P3",
+      "labels": [
+        "p3-assistant",
+        "must"
+      ],
+      "milestone": "2 - Integrated MVP",
+      "depends_on": [
+        "P3-1"
+      ],
+      "body": "Create `patchpilot/llm.py` (ONE provider, delete the other from `requirements.txt`) and finish `assistant.answer`:\n- System prompt: answer ONLY from the evidence; cite evidence ids; if the evidence is insufficient, set `refused=true`.\n- Output strict JSON `{answer, citations, refused}`; parse defensively (strip code fences, one retry).\n- Wrap evidence in clear delimiters and state that evidence text is untrusted data, never instructions.\n- Run `verify_citations`; on failure retry once, then refuse.\n- Cache answers by (question, evidence hash) in `data/cache/answers.json` so demo questions never depend on the network.\n\n**Done when:** `answer(\"What should we patch first?\")` returns a cited, verified answer on the fixture; `answer` never raises.\n\n**Depends on:** P3-1\n\nContract: `config/project.json`. Edit only files you own. Keep `python -m pytest -q` green."
+    },
+    {
+      "key": "P3-3",
+      "title": "[P3-3] Strengthen verifier + refusal policy",
+      "role": "P3",
+      "labels": [
+        "p3-assistant",
+        "must"
+      ],
+      "milestone": "2 - Integrated MVP",
+      "depends_on": [
+        "P3-1"
+      ],
+      "body": "Extend `verify_citations` (keep the signature and existing tests passing): also reject URLs in the answer that are not in the evidence, and reject numeric score claims that contradict the evidence for the cited CVE (tolerance 0.01). Add `tests/test_verifier.py` with at least 8 cases (good, wrong id, hallucinated CVE, hallucinated URL, wrong score, empty citations, refused-with-citations, injection echo).\n\n**Done when:** all verifier tests green.\n\n**Depends on:** P3-1\n\nContract: `config/project.json`. Edit only files you own. Keep `python -m pytest -q` green."
+    },
+    {
+      "key": "P3-4",
+      "title": "[P3-4] Eval set (~30 Q) + metrics",
+      "role": "P3",
+      "labels": [
+        "p3-assistant",
+        "must"
+      ],
+      "milestone": "3 - Demo-ready",
+      "depends_on": [
+        "P3-2",
+        "P3-3"
+      ],
+      "body": "Expand `data/eval/questions.json` to ~30 questions (about 10 unanswerable, a few multi-hop, a few \"no fix exists\", one injection). Implement `eval.run_eval()` -> `{citation_accuracy, refusal_accuracy, n}` and write `docs/eval.md` with the numbers and 3 example failures. Citation accuracy = answered questions where `verify_citations` passes AND `must_cite` CVEs appear. Refusal accuracy = refused iff `expect_refusal`.\nRun it on the real snapshot once P1-4 lands (adjust CVE ids in the questions; fixture ids are synthetic).\n\n**Done when:** `python -m patchpilot.eval` prints both numbers; P4 shows them in the app/deck.\n\n**Depends on:** P3-2, P3-3\n\nContract: `config/project.json`. Edit only files you own. Keep `python -m pytest -q` green."
+    },
+    {
+      "key": "P3-5",
+      "title": "[P3-5] Prompt-injection test",
+      "role": "P3",
+      "labels": [
+        "p3-assistant",
+        "should"
+      ],
+      "milestone": "3 - Demo-ready",
+      "depends_on": [
+        "P3-2"
+      ],
+      "body": "Fixture CVE `CVE-2099-0013` contains an injected instruction. Add a test (mock the LLM output if needed) proving the pipeline never repeats \"everything is patched\" and that the verifier flags unsupported claims. If using the real LLM, also record the result in `docs/eval.md`. Repeat on one real-snapshot CVE description containing instruction-like text if you can find one.\n\n**Done when:** the test passes and the behaviour is documented in 3 lines.\n\n**Depends on:** P3-2\n\nContract: `config/project.json`. Edit only files you own. Keep `python -m pytest -q` green."
+    },
+    {
+      "key": "P4-1",
+      "title": "[P4-1] Patch queue tab: tiers, factor bars, compare view",
+      "role": "P4",
+      "labels": [
+        "p4-app",
+        "must"
+      ],
+      "milestone": "1 - Contract and data",
+      "depends_on": [],
+      "body": "Polish tab 1 in `app.py`: colour tiers (`TIER_COLORS`), show the factor-contribution bar for the selected CVE with plain-English labels, filters (tier, KEV only, search), CSV export. When P2 merges `compare_orders`, add a \"CVSS-only vs PatchPilot\" panel (demo step 1).\n\n**Done when:** a stranger can see why CVE #1 is #1 in under 10 seconds.\n\nContract: `config/project.json`. Edit only files you own. Keep `python -m pytest -q` green."
+    },
+    {
+      "key": "P4-2",
+      "title": "[P4-2] Assets tab: CSV import + RapidFuzz match + review",
+      "role": "P4",
+      "labels": [
+        "p4-app",
+        "must"
+      ],
+      "milestone": "2 - Integrated MVP",
+      "depends_on": [],
+      "body": "Implement `assets.import_assets_csv` and `assets.match_asset` (RapidFuzz `WRatio` over distinct `cve_product` \"vendor product\" strings). CSV columns `name, criticality`; see `data/fixture/sample_assets.csv`. Store `match_confidence`. Confidence >= 0.85 auto-accepted; 0.60-0.85 flagged \"needs review\"; below 0.60 unmatched.\nUI: `st.data_editor` so the user can fix vendor/product on low-confidence rows and save; the queue re-ranks immediately.\nNo LLM, no embeddings.\n\n**Done when:** uploading the sample CSV on the real snapshot maps most rows and re-ranks the queue.\n\nContract: `config/project.json`. Edit only files you own. Keep `python -m pytest -q` green."
+    },
+    {
+      "key": "P4-3",
+      "title": "[P4-3] Graph tab (networkx + pyvis over SQLite)",
+      "role": "P4",
+      "labels": [
+        "p4-app",
+        "should"
+      ],
+      "milestone": "2 - Integrated MVP",
+      "depends_on": [],
+      "body": "Implement `graph.build_graph(conn, cve_id)` (nodes CVE, CWE, Product, Fix, Asset; edges CVE-CWE, CVE-Product, CVE-Fix, Product-Asset) and `render_html`. Colour by node type, KEV CVEs red. Keep it readable: max ~25 nodes. This is our \"knowledge graph\": a graph data model over SQLite, not Neo4j. Say so in the README.\n\n**Done when:** selecting a CVE shows its neighbourhood in the Graph tab.\n\nContract: `config/project.json`. Edit only files you own. Keep `python -m pytest -q` green."
+    },
+    {
+      "key": "P4-4",
+      "title": "[P4-4] Assistant tab + new-KEV flow",
+      "role": "P4",
+      "labels": [
+        "p4-app",
+        "must"
+      ],
+      "milestone": "2 - Integrated MVP",
+      "depends_on": [
+        "P3-2"
+      ],
+      "body": "Wire the Assistant tab: show the answer, the cited evidence ids (expandable, with the evidence text), a clear \"Refused: no evidence\" state, and example-question buttons. Finish the \"Check for new KEV\" flow: banner naming the new CVEs, queue re-sorted, new rows highlighted, plus a short auto-generated \"patch plan\" sentence from `scoring.explain` (no LLM needed).\n\n**Done when:** demo steps 3, 4 and 6 work end to end.\n\n**Depends on:** P3-2\n\nContract: `config/project.json`. Edit only files you own. Keep `python -m pytest -q` green."
+    },
+    {
+      "key": "P4-5",
+      "title": "[P4-5] README, architecture diagram, deck text, demo rehearsal",
+      "role": "P4",
+      "labels": [
+        "p4-app",
+        "must"
+      ],
+      "milestone": "3 - Demo-ready",
+      "depends_on": [],
+      "body": "- README: what/why, quickstart (Windows-friendly commands), architecture diagram (Mermaid), honest \"graph = SQLite model\" note, results (backtest + eval numbers from P2/P3).\n- Write replacement text for the stack/architecture/feasibility slides so they match what was built (no Neo4j/Chroma/FastAPI/microservices claims). Fix the worked example: KEV CVE B is Critical and ranks above C.\n- Rehearse the 4-minute demo from `config/project.json`; record a backup video; cache demo answers.\n\n**Done when:** a teammate who has never seen the repo can run it from the README.\n\nContract: `config/project.json`. Edit only files you own. Keep `python -m pytest -q` green."
+    },
+    {
+      "key": "ALL-2",
+      "title": "[ALL-2] Integration pass and freeze",
+      "role": "ALL",
+      "labels": [
+        "all-hands",
+        "must"
+      ],
+      "milestone": "3 - Demo-ready",
+      "depends_on": [
+        "P1-4",
+        "P2-4",
+        "P3-4",
+        "P4-5"
+      ],
+      "body": "Merge all PRs into `main`, fresh clone, `pip install -r requirements.txt`, run on the real snapshot with the network off, walk the demo script top to bottom, fix only blockers, then tag `v1.0`. No new features after this issue opens.\n\n**Done when:** demo works offline from a fresh clone.\n\n**Depends on:** P1-4, P2-4, P3-4, P4-5\n\nContract: `config/project.json`. Edit only files you own. Keep `python -m pytest -q` green."
+    }
+  ]
+}

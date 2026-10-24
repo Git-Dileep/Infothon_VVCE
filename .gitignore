@@ -1,0 +1,13 @@
+.env
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+data/fixture.db
+data/raw/
+data/cache/
+*.db-wal
+*.db-shm
+.DS_Store
+# data/patchpilot.db (the snapshot) IS committed by P1
