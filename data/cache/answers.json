@@ -170,5 +170,12 @@
       "CVE-2025-55182:kev"
     ],
     "refused": false
+  },
+  "what to patch first?||f0d0f6948003a842": {
+    "answer": "CVE-2025-55182 should be patched first as it is ranked #1 with a score of 0.9244 (tier: Critical).",
+    "citations": [
+      "CVE-2025-55182:score"
+    ],
+    "refused": false
   }
 }
