@@ -8,5 +8,4 @@ python-dotenv>=1.0
 matplotlib>=3.8
 pytest>=8.0
 # LLM: Person 3 keeps ONE of these and deletes the other
-anthropic>=0.40
 google-genai>=0.3

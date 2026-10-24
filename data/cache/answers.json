@@ -1,0 +1,158 @@
+{
+  "what should we patch first?||604d74af4309a5e9": {
+    "answer": "Based on the prioritized risk queue, CVE-2099-0002 should be patched first. CVE-2099-0002 is rank #1 (tier: Critical, score: 0.8645). Factor breakdown: CVSS contribution 0.2625, EPSS contribution 0.2820, KEV contribution 0.2000, ASSET contribution 0.1200. CVE-2099-0002 is listed in CISA KEV (date added: 2026-03-01).",
+    "citations": [
+      "CVE-2099-0002:score",
+      "CVE-2099-0002:kev"
+    ],
+    "refused": false
+  },
+  "why is cve-2099-0002 ranked where it is?||33426f59638db10b": {
+    "answer": "CVE-2099-0002 is in tier Critical with risk score 0.8645. Factors: CVSS=7.5 (contrib 0.2625), EPSS=0.94 (contrib 0.2820), KEV=1.0 (contrib 0.2000), ASSET=0.8 (contrib 0.1200). CVE-2099-0002 is in CISA KEV (date added: 2026-03-01, due: 2026-03-22).",
+    "citations": [
+      "CVE-2099-0002:score",
+      "CVE-2099-0002:kev"
+    ],
+    "refused": false
+  },
+  "is there a fix for cve-2099-0001?||fee01c70e042619d": {
+    "answer": "Fix links for CVE-2099-0001: Vendor Advisory: https://example.com/advisories/CVE-2099-0001; Patch: https://example.com/patches/CVE-2099-0001",
+    "citations": [
+      "CVE-2099-0001:fix"
+    ],
+    "refused": false
+  },
+  "is there a fix for cve-2099-0007?||e7741182ecd604de": {
+    "answer": "No fix link recorded for CVE-2099-0007.",
+    "citations": [
+      "CVE-2099-0007:fix"
+    ],
+    "refused": false
+  },
+  "which of my assets are affected by kev-listed cves?||c7e14f86ceeea77d": {
+    "answer": "Asset(s) affected by CVE-2099-0002: 'Edge router' (criticality 0.8). Asset(s) affected by CVE-2099-0003: 'Test laptop agent' (criticality 0.3). Asset(s) affected by CVE-2099-0012: 'Marketing site CMS' (criticality 0.5). CVE-2099-0002 is listed in CISA KEV (date added: 2026-03-01).",
+    "citations": [
+      "CVE-2099-0002:asset",
+      "CVE-2099-0003:asset",
+      "CVE-2099-0012:asset",
+      "CVE-2099-0002:kev"
+    ],
+    "refused": false
+  },
+  "summarise cve-2099-0013 and tell me what to do.||1203a034f2aa10d2": {
+    "answer": "CVE-2099-0013: [SYNTHETIC] Improper input validation in acme erp. CVE-2099-0013 is in tier Medium with risk score 0.2672. Factors: CVSS=4.3 (contrib 0.1505), EPSS=0.389 (contrib 0.1167), KEV=0.0 (contrib 0.0000), ASSET=0.0 (contrib 0.0000). CVE-2099-0013 EPSS probability score is 0.3890 (69.0th percentile).",
+    "citations": [
+      "CVE-2099-0013:desc",
+      "CVE-2099-0013:score",
+      "CVE-2099-0013:epss"
+    ],
+    "refused": false
+  },
+  "is there a patch available for cve-2099-0006?||5f676b7fb68e9c5e": {
+    "answer": "No fix link recorded for CVE-2099-0006.",
+    "citations": [
+      "CVE-2099-0006:fix"
+    ],
+    "refused": false
+  },
+  "are there any remediation links for cve-2099-0016?||63bcc683fcaa0ebb": {
+    "answer": "No fix link recorded for CVE-2099-0016.",
+    "citations": [
+      "CVE-2099-0016:fix"
+    ],
+    "refused": false
+  },
+  "why is cve-2099-0003 in the critical tier?||174d7ef9c850a81a": {
+    "answer": "CVE-2099-0003 is in tier Critical with risk score 0.5625. Factors: CVSS=6.5 (contrib 0.2275), EPSS=0.3 (contrib 0.0900), KEV=1.0 (contrib 0.2000), ASSET=0.3 (contrib 0.0450). Forced to Critical tier due to CISA KEV listing. CVE-2099-0003 is in CISA KEV (date added: 2026-03-01, due: 2026-03-22).",
+    "citations": [
+      "CVE-2099-0003:score",
+      "CVE-2099-0003:kev"
+    ],
+    "refused": false
+  },
+  "what is the risk score of cve-2099-0005?||eb33d5029c4454cd": {
+    "answer": "CVE-2099-0005 is in tier Critical with risk score 0.5332. Factors: CVSS=6.1 (contrib 0.2135), EPSS=0.399 (contrib 0.1197), KEV=1.0 (contrib 0.2000), ASSET=0.0 (contrib 0.0000). Forced to Critical tier due to CISA KEV listing. CVE-2099-0005 is in CISA KEV (date added: 2026-03-01, due: 2026-03-22).",
+    "citations": [
+      "CVE-2099-0005:score",
+      "CVE-2099-0005:kev"
+    ],
+    "refused": false
+  },
+  "what fix links exist for cve-2099-0002?||15a43fefcd373391": {
+    "answer": "Fix links for CVE-2099-0002: Vendor Advisory: https://example.com/advisories/CVE-2099-0002; Patch: https://example.com/patches/CVE-2099-0002",
+    "citations": [
+      "CVE-2099-0002:fix"
+    ],
+    "refused": false
+  },
+  "which of our servers or assets are vulnerable to cve-2099-0002?||ff782a2f88a9c8b0": {
+    "answer": "CVE-2099-0002 affects assets: 'Edge router' (crit 0.8). CVE-2099-0002 is in CISA KEV (date added: 2026-03-01, due: 2026-03-22).",
+    "citations": [
+      "CVE-2099-0002:asset",
+      "CVE-2099-0002:kev"
+    ],
+    "refused": false
+  },
+  "what vulnerability affects the edge router?||ddcb4ec32ad7a7df": {
+    "answer": "Asset(s) affected by CVE-2099-0002: 'Edge router' (criticality 0.8). Asset(s) affected by CVE-2099-0006: 'Edge router' (criticality 0.8). CVE-2099-0002 is listed in CISA KEV (date added: 2026-03-01).",
+    "citations": [
+      "CVE-2099-0002:asset",
+      "CVE-2099-0006:asset",
+      "CVE-2099-0002:kev"
+    ],
+    "refused": false
+  },
+  "what is the epss probability for cve-2099-0003?||26e86b062152aa83": {
+    "answer": "CVE-2099-0003 EPSS probability score is 0.3000 (90.0th percentile).",
+    "citations": [
+      "CVE-2099-0003:epss"
+    ],
+    "refused": false
+  },
+  "what weakness type or cwe is associated with cve-2099-0004?||8eda4e5535094f0d": {
+    "answer": "CVE-2099-0004 weakness type: CWE-79.",
+    "citations": [
+      "CVE-2099-0004:cwe"
+    ],
+    "refused": false
+  },
+  "what are our top priority patches?||604d74af4309a5e9": {
+    "answer": "Based on the prioritized risk queue, CVE-2099-0002 should be patched first. CVE-2099-0002 is rank #1 (tier: Critical, score: 0.8645). Factor breakdown: CVSS contribution 0.2625, EPSS contribution 0.2820, KEV contribution 0.2000, ASSET contribution 0.1200. CVE-2099-0002 is listed in CISA KEV (date added: 2026-03-01).",
+    "citations": [
+      "CVE-2099-0002:score",
+      "CVE-2099-0002:kev"
+    ],
+    "refused": false
+  },
+  "is cve-2099-0012 listed on cisa kev?||b47d263509febbe8": {
+    "answer": "CVE-2099-0012: [SYNTHETIC] OS command injection in webly cms before 9.5 allows remote attackers to compromise the system. CVE-2099-0012 is in tier Critical with risk score 0.5588. Factors: CVSS=8.1 (contrib 0.2835), EPSS=0.001 (contrib 0.0003), KEV=1.0 (contrib 0.2000), ASSET=0.5 (contrib 0.0750). Forced to Critical tier due to CISA KEV listing. CVE-2099-0012 is in CISA KEV (date added: 2026-03-01, due: 2026-03-22).",
+    "citations": [
+      "CVE-2099-0012:desc",
+      "CVE-2099-0012:score",
+      "CVE-2099-0012:kev"
+    ],
+    "refused": false
+  },
+  "what is the cvss base score for cve-2099-0001?||747bf1682065c8a1": {
+    "answer": "CVE-2099-0001 is in tier Medium with risk score 0.4240. Factors: CVSS=9.8 (contrib 0.3430), EPSS=0.02 (contrib 0.0060), KEV=0.0 (contrib 0.0000), ASSET=0.5 (contrib 0.0750).",
+    "citations": [
+      "CVE-2099-0001:score"
+    ],
+    "refused": false
+  },
+  "show me the patch advisory for cve-2099-0004.||b875f4708b65a693": {
+    "answer": "Fix links for CVE-2099-0004: Vendor Advisory: https://example.com/advisories/CVE-2099-0004",
+    "citations": [
+      "CVE-2099-0004:fix"
+    ],
+    "refused": false
+  },
+  "which assets run software affected by cve-2099-0012?||b47d263509febbe8": {
+    "answer": "CVE-2099-0012 affects assets: 'Marketing site CMS' (crit 0.5). CVE-2099-0012 is in CISA KEV (date added: 2026-03-01, due: 2026-03-22).",
+    "citations": [
+      "CVE-2099-0012:asset",
+      "CVE-2099-0012:kev"
+    ],
+    "refused": false
+  }
+}
