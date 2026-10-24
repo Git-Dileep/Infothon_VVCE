@@ -219,14 +219,19 @@ def retrieve(conn: sqlite3.Connection, question: str) -> list[Evidence]:
                 ))
         return evs
 
+    # Guard: credential or secret requests are out of scope
+    if re.search(r"\b(password|secret|credential|token|api key)\b", q_lower):
+        return []
+
     # Intent 3: Multi-hop asset questions
-    if re.search(r"\b(asset|assets|server|servers|infrastructure|my inventory)\b", q_lower):
+    if re.search(r"\b(asset|assets|server|servers|infrastructure|my inventory|router|laptop|cms|database|host)\b", q_lower):
         filter_kev = bool(re.search(r"\bkev\b", q_lower))
         join_kev_clause = "JOIN kev k ON k.cve_id = cp.cve_id" if filter_kev else "LEFT JOIN kev k ON k.cve_id = cp.cve_id"
 
         query = f"""
             SELECT DISTINCT
                 a.name AS asset_name,
+                a.product,
                 a.criticality,
                 cp.cve_id,
                 c.description,
@@ -244,9 +249,17 @@ def retrieve(conn: sqlite3.Connection, question: str) -> list[Evidence]:
         if not rows:
             return []
 
+        # If question mentions a specific asset name or product, filter to it
+        specific_rows = [
+            r for r in rows
+            if (r["asset_name"] and r["asset_name"].lower() in q_lower)
+            or (r["product"] and len(r["product"]) > 3 and r["product"].lower() in q_lower)
+        ]
+        active_rows = specific_rows if specific_rows else rows
+
         evs = []
         cve_groups: dict[str, list[sqlite3.Row]] = {}
-        for r in rows:
+        for r in active_rows:
             cve_groups.setdefault(r["cve_id"], []).append(r)
 
         for cid, group in cve_groups.items():

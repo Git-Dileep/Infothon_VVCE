@@ -61,3 +61,13 @@ def test_answer_unanswerable_question():
     assert ans["refused"]
     assert ans["citations"] == []
 
+
+def test_eval_metrics():
+    from patchpilot import eval as peval
+    conn = make_conn()
+    metrics = peval.run_eval(conn=conn)
+    assert metrics["n"] == 30
+    assert metrics["refusal_accuracy"] == 1.0
+    assert metrics["citation_accuracy"] == 1.0
+
+
