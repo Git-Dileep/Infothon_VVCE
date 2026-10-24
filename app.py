@@ -298,13 +298,35 @@ with tab_assets:
 
 # ---------------- graph ----------------
 with tab_graph:
-    sel = st.selectbox("CVE", queue["cve_id"], key="graph_cve")
+    st.subheader("🕸️ Vulnerability & Asset Relationship Knowledge Graph")
+    st.markdown(
+        "Interactive entity-relationship graph modeled directly over SQLite tables "
+        "(`cve`, `cwe`, `cve_product`, `fix`, `asset`) using **NetworkX** and rendered via **Pyvis**. "
+        "*(Note: Powered by a relational graph model over SQLite, not an expensive Neo4j instance).*"
+    )
+
+    g_col1, g_col2 = st.columns([3, 1])
+    with g_col1:
+        sel = st.selectbox("Select CVE to visualize neighbourhood:", queue["cve_id"], key="graph_cve")
+    with g_col2:
+        st.markdown(
+            """
+            **Legend:**
+            - 🔴 **KEV CVE** (Active Exploit)
+            - 🟡 **Standard CVE**
+            - 🟣 **CWE Category**
+            - 🔵 **Product**
+            - 🟢 **Fix / Advisory**
+            - 🟠 **Internal Asset**
+            """
+        )
+
     try:
         from patchpilot import graph
 
-        components.html(graph.render_html(graph.build_graph(conn, sel)), height=600)
-    except NotImplementedError as e:
-        st.info(str(e))
-    except ImportError as e:
-        st.info(f"Missing dependency: {e}")
+        g = graph.build_graph(conn, sel)
+        st.caption(f"Graph neighbourhood for **{sel}**: {g.number_of_nodes()} nodes, {g.number_of_edges()} edges")
+        components.html(graph.render_html(g), height=620)
+    except Exception as e:
+        st.error(f"Error rendering knowledge graph: {e}")
 
