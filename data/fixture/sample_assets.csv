@@ -1,6 +1,7 @@
-name,criticality
-Prod DB server (dbcorp datastore),1.0
-marketing wordpress-like CMS webly,0.5
-Edge Router netwave,0.8
-QA laptop cloudkit agent,0.3
-HR system acme ERP,0.7
+name,criticality,vendor,product
+Prod DB server (dbcorp datastore),1.0,,
+marketing wordpress-like CMS webly,0.5,,
+Edge Router netwave,0.8,,
+QA laptop cloudkit agent,0.3,,
+HR system acme ERP,0.7,,
+Valkey production cluster,1.0,lfprojects,valkey

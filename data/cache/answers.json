@@ -154,5 +154,21 @@
       "CVE-2099-0012:kev"
     ],
     "refused": false
+  },
+  "what should we patch first?||f0d0f6948003a842": {
+    "answer": "Based on the prioritized risk queue, CVE-2025-55182 should be patched first. CVE-2025-55182 is rank #1 (tier: Critical, score: 0.9244). Factor breakdown: CVSS contribution 0.3500, EPSS contribution 0.2994, KEV contribution 0.2000, ASSET contribution 0.0750. CVE-2025-55182 is listed in CISA KEV (date added: 2025-12-05).",
+    "citations": [
+      "CVE-2025-55182:score",
+      "CVE-2025-55182:kev"
+    ],
+    "refused": false
+  },
+  "what are our top priority patches?||f0d0f6948003a842": {
+    "answer": "Based on the prioritized risk queue, CVE-2025-55182 should be patched first. CVE-2025-55182 is rank #1 (tier: Critical, score: 0.9244). Factor breakdown: CVSS contribution 0.3500, EPSS contribution 0.2994, KEV contribution 0.2000, ASSET contribution 0.0750. CVE-2025-55182 is listed in CISA KEV (date added: 2025-12-05).",
+    "citations": [
+      "CVE-2025-55182:score",
+      "CVE-2025-55182:kev"
+    ],
+    "refused": false
   }
 }

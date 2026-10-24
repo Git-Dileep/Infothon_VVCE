@@ -27,7 +27,14 @@ def run_eval(
         data = json.load(f)
 
     questions = data.get("questions", [])
-    conn = conn or db.connect()
+    if conn is None:
+        from . import config
+        # If questions target synthetic fixture (CVE-2099-*) and fixture.db exists, use it
+        has_fixture_qs = any("CVE-2099-" in q.get("question", "") for q in questions)
+        if has_fixture_qs and getattr(config, "FIXTURE_DB_PATH", None) and config.FIXTURE_DB_PATH.exists():
+            conn = db.connect(config.FIXTURE_DB_PATH)
+        else:
+            conn = db.connect()
 
     refusal_correct = 0
     citation_correct = 0
@@ -97,8 +104,7 @@ def main():
     print("=" * 60)
     print("PatchPilot Assistant Evaluation Harness")
     print("=" * 60)
-    conn = db.connect()
-    metrics = run_eval(conn=conn)
+    metrics = run_eval()
     print(f"Total questions evaluated (N): {metrics['n']}")
     print(f"  Answerable questions:       {metrics['answerable_count']}")
     print(f"  Unanswerable questions:     {metrics['n'] - metrics['answerable_count']}")

@@ -4,7 +4,15 @@ __pycache__/
 .venv/
 .pytest_cache/
 data/fixture.db
-data/raw/
+!data/raw/
+data/raw/*
+!data/raw/epss/
+data/raw/epss/*
+!data/raw/kev/
+data/raw/kev/*
+!data/raw/kev/known_exploited_vulnerabilities.json
+!data/raw/epss/epss_scores-2025-01-01.csv.gz
+!data/raw/epss/epss_scores-2025-07-01.csv.gz
 data/cache/*
 !data/cache/answers.json
 *.db-wal
