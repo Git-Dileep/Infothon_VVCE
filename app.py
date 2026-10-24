@@ -245,47 +245,56 @@ with tab_chat:
         "If verifiable evidence is not found, the assistant strictly **refuses to answer** to eliminate hallucinations."
     )
 
+    if "assistant_query_input" not in st.session_state:
+        st.session_state["assistant_query_input"] = ""
+
+    def _set_assistant_query(q_text: str):
+        st.session_state["assistant_query_input"] = q_text
+        st.session_state["trigger_auto_ask"] = True
+
     st.markdown("**Example Questions (Click to test):**")
     top_cve = queue.iloc[0]["cve_id"] if len(queue) > 0 else "CVE-2025-55182"
 
     col_btn1, col_btn2, col_btn3, col_btn4 = st.columns(4)
     with col_btn1:
-        if st.button("🚨 What to patch first?", use_container_width=True):
-            st.session_state["chat_query"] = "What should we patch first?"
-            st.session_state["auto_ask"] = True
-            st.rerun()
+        st.button(
+            "🚨 What to patch first?",
+            use_container_width=True,
+            on_click=_set_assistant_query,
+            args=("What should we patch first?",),
+        )
     with col_btn2:
-        if st.button(f"🔧 Fix for {top_cve}?", use_container_width=True):
-            st.session_state["chat_query"] = f"Is there a fix for {top_cve}?"
-            st.session_state["auto_ask"] = True
-            st.rerun()
+        st.button(
+            f"🔧 Fix for {top_cve}?",
+            use_container_width=True,
+            on_click=_set_assistant_query,
+            args=(f"Is there a fix for {top_cve}?",),
+        )
     with col_btn3:
-        if st.button("🏢 Affected assets?", use_container_width=True):
-            st.session_state["chat_query"] = "Which internal assets are affected by critical vulnerabilities?"
-            st.session_state["auto_ask"] = True
-            st.rerun()
+        st.button(
+            "🏢 Affected assets?",
+            use_container_width=True,
+            on_click=_set_assistant_query,
+            args=("Which internal assets are affected by critical vulnerabilities?",),
+        )
     with col_btn4:
-        if st.button("🛑 Out-of-scope (Refusal)", use_container_width=True):
-            st.session_state["chat_query"] = "Who is the CEO of Acme Corporation?"
-            st.session_state["auto_ask"] = True
-            st.rerun()
-
-    if "chat_query" not in st.session_state:
-        st.session_state["chat_query"] = ""
+        st.button(
+            "🛑 Out-of-scope (Refusal)",
+            use_container_width=True,
+            on_click=_set_assistant_query,
+            args=("Who is the CEO of Acme Corporation?",),
+        )
 
     q_input = st.text_input(
         "Ask a question about vulnerabilities or assets:",
-        value=st.session_state["chat_query"],
         placeholder="e.g. What is the risk score of CVE-2025-55182? or Is there a patch?",
         key="assistant_query_input",
     )
 
     ask_clicked = st.button("Ask Assistant", type="primary")
+    auto_ask = st.session_state.pop("trigger_auto_ask", False)
 
-    # Auto-trigger from example buttons
-    auto_ask = st.session_state.pop("auto_ask", False)
-
-    active_query = q_input.strip()
+    active_query = st.session_state.get("assistant_query_input", "").strip()
     if (ask_clicked or auto_ask) and active_query:
         with st.spinner("Retrieving evidence and verifying citations..."):
             res = assistant.answer(active_query, conn)
@@ -316,7 +325,6 @@ with tab_chat:
                             st.markdown(f"- **`[{cid}]`** *(verified fact)*")
 
 
-
 # ---------------- assets ----------------
 with tab_assets:
     st.subheader("🏢 Internal Asset Inventory & Fuzzy Vendor/Product Mapping")
@@ -328,9 +336,10 @@ with tab_assets:
 
     asset_list = assets.list_assets(conn)
 
-    up_col1, up_col2 = st.columns([2, 1])
+    up_col1, up_col2 = st.columns([1.5, 1.5])
     with up_col1:
-        up = st.file_uploader("Upload asset CSV (`name, criticality`)", type="csv")
+        st.markdown("**📤 Upload Custom Asset Inventory:**")
+        up = st.file_uploader("Upload CSV (`name, criticality [, vendor, product]`)", type="csv")
         if up and st.button("Import Uploaded CSV", type="primary"):
             try:
                 count = assets.import_assets_csv(conn, up)
@@ -340,27 +349,41 @@ with tab_assets:
                 st.error(f"Import failed: {e}")
 
     with up_col2:
-        st.markdown("**Quick Demo Data:**")
-        if st.button("Load Sample Assets (`sample_assets.csv`)"):
-            try:
-                with open(config.SAMPLE_ASSETS_CSV, "rb") as f:
-                    count = assets.import_assets_csv(conn, f)
-                st.success(f"Loaded {count} sample assets! Queue re-ranked.")
-                st.rerun()
-            except Exception as e:
-                st.error(f"Failed to load sample assets: {e}")
-
-        if len(asset_list) > 0:
-            if st.button("Clear Asset Inventory", type="secondary"):
-                conn.execute("DELETE FROM asset")
-                conn.commit()
-                st.warning("Asset inventory cleared. Risk scores reset to neutral asset factor.")
-                st.rerun()
+        st.markdown("**📂 Load Demo Scenario Datasets:**")
+        sample_catalog = {
+            "☁️ Cloud & FinTech Infrastructure": "docs/sample_cloud_fintech.csv",
+            "🏥 Healthcare & Hospital Network": "docs/sample_healthcare_hospital.csv",
+            "🛒 E-Commerce & Retail Fleet": "docs/sample_ecommerce_retail.csv",
+            "🏢 Enterprise (Messy Fuzzy Inventory)": "docs/sample_enterprise_assets.csv",
+            "Default Sample": str(config.SAMPLE_ASSETS_CSV),
+        }
+        chosen_sample_name = st.selectbox("Select scenario dataset to test:", list(sample_catalog.keys()), key="sample_scenario_select")
+        col_load, col_clear = st.columns(2)
+        with col_load:
+            if st.button("📥 Load Dataset", type="primary", use_container_width=True):
+                chosen_file = sample_catalog[chosen_sample_name]
+                p = Path(chosen_file)
+                if not p.is_absolute():
+                    p = Path(config.PROJECT_ROOT) / p
+                try:
+                    with open(p, "rb") as f:
+                        count = assets.import_assets_csv(conn, f)
+                    st.success(f"Loaded {count} assets from '{chosen_sample_name}'! Queue re-ranked.")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Failed to load sample: {e}")
+        with col_clear:
+            if len(asset_list) > 0:
+                if st.button("🗑️ Clear Assets", use_container_width=True):
+                    conn.execute("DELETE FROM asset")
+                    conn.commit()
+                    st.warning("Asset inventory cleared. Risk scores reset to neutral asset factor.")
+                    st.rerun()
 
     st.markdown("---")
 
     if len(asset_list) == 0:
-        st.info("No assets currently registered. Upload a CSV above or click 'Load Sample Assets' to see asset-driven re-ranking.")
+        st.info("No assets currently registered. Upload a CSV above or select a scenario dataset to see asset-driven re-ranking.")
     else:
         # Match status annotation
         def status_label(conf):
@@ -411,7 +434,7 @@ with tab_graph:
     st.markdown(
         "Interactive entity-relationship graph modeled directly over SQLite tables "
         "(`cve`, `cwe`, `cve_product`, `fix`, `asset`) using **NetworkX** and rendered via **Pyvis**. "
-        "**Click any green 🔧 Fix/Advisory node to open the vendor link in a new tab.** "
+        "**Click any node to inspect details; click green 🔧 Fix/Advisory nodes to open vendor patch links.** "
         "*(Powered by a relational graph model over SQLite, not an expensive Neo4j instance).*"
     )
 
@@ -437,7 +460,61 @@ with tab_graph:
         g = graph.build_graph(conn, sel)
         st.caption(f"Graph neighbourhood for **{sel}**: {g.number_of_nodes()} nodes, {g.number_of_edges()} edges")
         components.html(graph.render_html(g), height=620)
+
+        # Directly provide structured, clickable remediation links & node details
+        fixes = conn.execute("SELECT url, kind FROM fix WHERE cve_id = ?", (sel,)).fetchall()
+        cve_row = conn.execute("SELECT cvss, cwe, description FROM cve WHERE cve_id = ?", (sel,)).fetchone()
+        is_kev = bool(conn.execute("SELECT 1 FROM kev WHERE cve_id = ?", (sel,)).fetchone())
+        prods = conn.execute("SELECT vendor, product FROM cve_product WHERE cve_id = ?", (sel,)).fetchall()
+        
+        st.markdown("---")
+        st.markdown(f"#### 🔎 Inspected Details & Remediation for `{sel}`")
+        det_col1, det_col2, det_col3 = st.columns([1.2, 1, 1])
+        
+        with det_col1:
+            st.markdown("**🔧 Direct Fix / Advisory Links (Click to Open):**")
+            if fixes:
+                for fix_url, fix_kind in fixes:
+                    kind_tag = (fix_kind or "Advisory").title()
+                    # Truncated display label
+                    disp_url = fix_url
+                    if len(disp_url) > 42:
+                        disp_url = disp_url[:39] + "…"
+                    st.link_button(f"↗ {kind_tag}: {disp_url}", fix_url, use_container_width=True)
+            else:
+                st.info("No vendor advisory URLs recorded in NVD for this CVE.")
+
+        with det_col2:
+            st.markdown("**🛡️ Weakness & Threat Status:**")
+            st.markdown(f"- **Severity:** `CVSS {cve_row[0] if cve_row else 'N/A'}`")
+            st.markdown(f"- **CISA KEV Status:** `{'⚠️ Listed (Active Exploit)' if is_kev else 'Not listed in KEV'}`")
+            cwe_val = cve_row[1] if cve_row and cve_row[1] else "None recorded"
+            st.markdown(f"- **Weakness (CWE):** `{cwe_val}`")
+
+        with det_col3:
+            st.markdown("**📦 Affected Products & Connected Assets:**")
+            if prods:
+                prod_strs = [f"`{v} / {p}`" for v, p in prods[:4]]
+                st.markdown("- **Products:** " + ", ".join(prod_strs))
+            else:
+                st.markdown("- *No specific product mapping recorded.*")
+
+            # Check if any loaded assets match these products
+            matched_q = conn.execute("""
+                SELECT a.name, a.criticality FROM asset a
+                JOIN cve_product p ON lower(a.vendor) = lower(p.vendor) AND lower(a.product) = lower(p.product)
+                WHERE p.cve_id = ?
+            """, (sel,)).fetchall()
+            if matched_q:
+                st.markdown(f"- **Affected Company Assets ({len(matched_q)}):**")
+                for an, ac in matched_q:
+                    crit_emoji = "🔴" if ac >= 0.8 else ("🟡" if ac >= 0.5 else "🟢")
+                    st.markdown(f"  - {crit_emoji} **{an}** *(Crit: {ac:.1f})*")
+            else:
+                st.caption("No internal company assets are currently matched to this product.")
+
     except Exception as e:
         st.error(f"Error rendering knowledge graph: {e}")
+
 
 
