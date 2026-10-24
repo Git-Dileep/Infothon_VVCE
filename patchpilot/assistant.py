@@ -380,15 +380,82 @@ def answer(question: str, conn: sqlite3.Connection | None = None) -> Answer:
         }
 
 
+URL_RE = re.compile(r"https?://[^\s)\]\"'>]+", re.IGNORECASE)
+SCORE_CLAIM_RE = re.compile(
+    r"\b(?:risk\s+score|base\s+score|score|cvss|epss)\s*(?:of|is|:|=|was|around)?\s*(\d+(?:\.\d+)?)",
+    re.IGNORECASE,
+)
+NUM_RE = re.compile(r"\b\d+(?:\.\d+)?\b")
+INJECTION_ECHO_RE = re.compile(
+    r"\b(ignore all previous instructions|already been patched and needs no action|every cve has already been patched|everything is patched)\b",
+    re.IGNORECASE,
+)
+
+
+def _clean_url(url: str) -> str:
+    return url.strip().rstrip(".,;:!?)'\"")
+
+
 def verify_citations(ans: Answer, evidence: list[Evidence]) -> bool:
-    """Baseline verifier (P3 extends). A non-refused answer is valid only if:
-    1) it cites at least one id, 2) every cited id was retrieved,
-    3) every CVE id mentioned in the text appears in the retrieved evidence."""
+    """Verifier with URL, score, and injection echo checks.
+    A non-refused answer is valid only if:
+    1) It cites at least one id, and every cited id was retrieved.
+    2) Every CVE id mentioned in the text appears in the retrieved evidence.
+    3) Any URL in the answer is present in the evidence.
+    4) Any numeric score claim does not contradict the evidence for the cited CVE (tolerance 0.01).
+    5) It does not echo prompt injections.
+    A refused answer is valid only if its citations list is empty.
+    """
     if ans["refused"]:
         return not ans["citations"]
+
+    if not ans["citations"]:
+        return False
+
     ids = {e.id for e in evidence}
     cves = {e.cve_id.upper() for e in evidence if e.cve_id}
-    if not ans["citations"] or not set(ans["citations"]) <= ids:
+
+    # 1. Cited IDs must be subset of retrieved evidence IDs
+    if not set(ans["citations"]) <= ids:
         return False
-    mentioned = {m.upper() for m in CVE_RE.findall(ans["answer"])}
-    return mentioned <= cves
+
+    # 2. Mentioned CVEs must be in retrieved evidence CVEs
+    mentioned_cves = {m.upper() for m in CVE_RE.findall(ans["answer"])}
+    if not (mentioned_cves <= cves):
+        return False
+
+    # 3. Reject prompt injection echo
+    if INJECTION_ECHO_RE.search(ans["answer"]):
+        return False
+
+    # 4. Reject URLs in the answer that are not in the evidence
+    allowed_urls = set()
+    for e in evidence:
+        for u in URL_RE.findall(e.text):
+            allowed_urls.add(_clean_url(u))
+        if e.source and e.source.startswith("http"):
+            allowed_urls.add(_clean_url(e.source))
+
+    answer_urls = [_clean_url(u) for u in URL_RE.findall(ans["answer"])]
+    for u in answer_urls:
+        if u not in allowed_urls:
+            return False
+
+    # 5. Reject numeric score claims that contradict evidence for cited CVEs (tolerance 0.01)
+    score_claims = [float(m.group(1)) for m in SCORE_CLAIM_RE.finditer(ans["answer"])]
+    if score_claims:
+        cited_evidence = [e for e in evidence if e.id in ans["citations"]]
+        valid_numbers: set[float] = set()
+        for ce in cited_evidence:
+            for num_str in NUM_RE.findall(ce.text):
+                try:
+                    valid_numbers.add(float(num_str))
+                except ValueError:
+                    pass
+
+        if valid_numbers:
+            for claim in score_claims:
+                if not any(abs(claim - vn) <= 0.01 for vn in valid_numbers):
+                    return False
+
+    return True
