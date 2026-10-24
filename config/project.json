@@ -1,0 +1,210 @@
+{
+  "project": "PatchPilot",
+  "tagline": "Exploit-aware patch prioritisation with an evidence-only assistant",
+  "event": {
+    "name": "in7.0thon (VVCE)",
+    "problem_statement": "PS #17 Autonomous Vulnerability Intelligence & RAG Agent",
+    "build_window_hours": 8,
+    "team_size": 4
+  },
+  "focus": [
+    "1. Exploit-aware ranking with an explainable score, proven by a backtest vs CVSS-only",
+    "2. Evidence-only assistant: cited answers, deterministic citation verifier, refuses without evidence"
+  ],
+  "out_of_scope": [
+    "Neo4j",
+    "ChromaDB / embeddings",
+    "LangChain",
+    "FastAPI",
+    "Docker",
+    "APScheduler",
+    "LLM-based asset matching",
+    "OSV / GitHub / vendor scraping",
+    "PURL/SBOM",
+    "reachability"
+  ],
+  "stack": {
+    "language": "Python 3.11+",
+    "storage": "SQLite (+FTS5)",
+    "data": "pandas, requests",
+    "app": "Streamlit (single app)",
+    "asset_matching": "RapidFuzz",
+    "graph": "networkx + pyvis over SQLite tables",
+    "llm": "ONE provider (Anthropic or Gemini), chosen by Person 3"
+  },
+  "branching": {
+    "main": "protected-by-convention: only reviewed PRs",
+    "branches": {
+      "P1": "p1-data",
+      "P2": "p2-scoring",
+      "P3": "p3-assistant",
+      "P4": "p4-app"
+    },
+    "rules": [
+      "Edit only files you own",
+      "Contract changes (schema, function signatures, contracts.py, config weights) need an all-hands issue + PR",
+      "Open PR into main early and often; keep tests green",
+      "No new dependency without telling the team"
+    ]
+  },
+  "team": {
+    "P1": {
+      "role": "Data owner",
+      "owns": [
+        "patchpilot/db.py",
+        "patchpilot/ingest.py",
+        "data/patchpilot.db",
+        "data/raw/"
+      ],
+      "label": "p1-data"
+    },
+    "P2": {
+      "role": "Scoring and backtest",
+      "owns": [
+        "patchpilot/scoring.py",
+        "patchpilot/backtest.py",
+        "docs/backtest.*"
+      ],
+      "label": "p2-scoring"
+    },
+    "P3": {
+      "role": "Assistant",
+      "owns": [
+        "patchpilot/assistant.py",
+        "patchpilot/eval.py",
+        "patchpilot/llm.py",
+        "data/eval/"
+      ],
+      "label": "p3-assistant"
+    },
+    "P4": {
+      "role": "App, assets, graph, demo",
+      "owns": [
+        "app.py",
+        "patchpilot/assets.py",
+        "patchpilot/graph.py",
+        "README.md",
+        "docs/"
+      ],
+      "label": "p4-app"
+    }
+  },
+  "scoring": {
+    "formula": "Risk = 0.35*CVSS/10 + 0.30*EPSS + 0.20*KEV + 0.15*Asset",
+    "weights": {
+      "cvss": 0.35,
+      "epss": 0.3,
+      "kev": 0.2,
+      "asset": 0.15
+    },
+    "tiers": {
+      "Critical": ">= 0.75 OR KEV-listed",
+      "High": "0.50-0.74",
+      "Medium": "0.25-0.49",
+      "Low": "< 0.25"
+    },
+    "ordering": "Tier first (Critical..Low), then score descending. KEV items are always Critical but still sorted by score inside the tier.",
+    "asset_factor": "max criticality of matched assets; 0.5 neutral if no inventory loaded; 0.0 if inventory exists but CVE matches nothing",
+    "missing_values": "CVSS null -> 0, EPSS null -> 0"
+  },
+  "data_sources": {
+    "cisa_kev": "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json",
+    "nvd": "https://services.nvd.nist.gov/rest/json/cves/2.0 (use API key; paginate; backoff on 403/429)",
+    "epss": "https://www.first.org/epss/data_stats lists current + dated daily files; VERIFY the download URL first thing",
+    "nvd_window": "published 2024-01-01 .. 2025-12-31 (shrink if snapshot > 50 MB)",
+    "fix_links": "NVD reference URLs tagged 'Patch' or 'Vendor Advisory'"
+  },
+  "contract": {
+    "tables": {
+      "cve": [
+        "cve_id PK",
+        "description",
+        "published",
+        "cvss REAL null",
+        "cwe null"
+      ],
+      "cve_product": [
+        "cve_id",
+        "vendor (lowercase)",
+        "product (lowercase)"
+      ],
+      "fix": [
+        "cve_id",
+        "url",
+        "kind: Patch|Vendor Advisory"
+      ],
+      "kev": [
+        "cve_id PK",
+        "date_added",
+        "due_date"
+      ],
+      "kev_seen": [
+        "cve_id PK"
+      ],
+      "epss": [
+        "cve_id PK",
+        "score",
+        "percentile"
+      ],
+      "asset": [
+        "id PK",
+        "name",
+        "vendor",
+        "product",
+        "criticality 0..1",
+        "match_confidence 0..1 null"
+      ],
+      "cve_fts": "FTS5(cve_id UNINDEXED, description)"
+    },
+    "functions": {
+      "scoring.ranked_queue(conn, only_matched=False) -> DataFrame": "columns: rank, cve_id, tier, score, cvss, epss, kev, asset_crit, matched_assets, description",
+      "scoring.explain(conn, cve_id) -> dict": "{cve_id, score, tier, kev_override, matched_assets[], components[{factor, raw, normalized, weight, contribution}]}",
+      "assistant.retrieve(conn, question) -> list[Evidence]": "Evidence(id, cve_id, kind, text, source); id like 'CVE-2099-0002:kev'",
+      "assistant.answer(question, conn=None) -> Answer": "{answer, citations[], refused}; never raises",
+      "assistant.verify_citations(answer, evidence) -> bool": "cited ids subset of retrieved; CVE ids in text subset of evidence",
+      "ingest.new_kev_since_last_sync(conn) -> list[str]": "KEV ids not yet in kev_seen",
+      "ingest.simulate_new_kev(conn) -> str": "offline demo: inserts CVE-2099-0010 into KEV",
+      "assets.match_asset(conn, name) -> (vendor, product, confidence)": "RapidFuzz",
+      "graph.build_graph(conn, cve_id) / render_html(g)": "networkx + pyvis"
+    }
+  },
+  "fixture": {
+    "note": "SYNTHETIC. CVE-2099-* do not exist. Everyone develops against this until P1 ships the real snapshot.",
+    "worked_example": {
+      "CVE-2099-0001": "A: 9.8 / 0.02 / no KEV -> Medium",
+      "CVE-2099-0002": "B: 7.5 / 0.94 / KEV -> Critical (0.8645)",
+      "CVE-2099-0003": "C: 6.5 / 0.30 / KEV -> Critical (0.5625)",
+      "CVE-2099-0010": "demo CVE: becomes #1 when simulated KEV fires",
+      "CVE-2099-0013": "prompt-injection test description",
+      "CVE-2099-0018": "cvss NULL",
+      "CVE-2099-0019": "no EPSS row",
+      "CVE-2099-0007": "no fix"
+    }
+  },
+  "definition_of_done": {
+    "must": [
+      "Real snapshot committed (P1)",
+      "Ranked queue + factor breakdown in UI",
+      "Backtest chart + table reproducible by one command",
+      "Assistant answers with verified citations and refuses correctly; eval numbers recorded"
+    ],
+    "should": [
+      "Asset CSV upload with fuzzy match + review",
+      "Graph view",
+      "Check-for-new-KEV demo flow"
+    ],
+    "cut_first": [
+      "Graph polish",
+      "Extra eval questions",
+      "Multiple backtest cutoffs beyond two"
+    ]
+  },
+  "demo_script": [
+    "CVSS-only order vs PatchPilot order, explain with factor bars",
+    "Backtest chart",
+    "Assistant answers a real question with citations",
+    "Assistant refuses an unanswerable question",
+    "Upload asset CSV, queue re-ranks",
+    "Click 'Check for new KEV': CVE jumps to #1"
+  ]
+}
