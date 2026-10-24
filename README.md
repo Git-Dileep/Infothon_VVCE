@@ -35,7 +35,7 @@ flowchart LR
 The "knowledge graph" is a graph data model over SQLite tables (CVE-CWE, CVE-Product, CVE-Fix, Product-Asset), queried with SQL and visualised with networkx/pyvis. It is not Neo4j.
 
 ## Team workflow
-See [CONTRIBUTING.md](CONTRIBUTING.md), [config/project.json](config/project.json) (the contract) and [docs/ANTIGRAVITY_PROMPT.md](docs/ANTIGRAVITY_PROMPT.md).
+See [CONTRIBUTING.md](CONTRIBUTING.md), [config/project.json](config/project.json) (the contract)
 
 ## Results
 _Backtest and eval numbers go here (P2-4, P3-4, P4-5)._
